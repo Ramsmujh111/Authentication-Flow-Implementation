@@ -1,21 +1,51 @@
 'use client';
 
-import React, { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import React, { useState, useEffect } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { Suspense } from 'react';
 import { PasswordInput, Button } from '@/components/ui';
-import { changePasswordSchema } from '@/lib/schemas/validationSchemas';
+import { z } from 'zod';
 import { ZodError } from 'zod';
 
-export default function ChangePasswordForm() {
+// Password validation schema
+const passwordSchema = z
+  .string()
+  .min(8, 'Password must be at least 8 characters')
+  .regex(/[A-Z]/, 'Password must contain at least one uppercase letter')
+  .regex(/[a-z]/, 'Password must contain at least one lowercase letter')
+  .regex(/[0-9]/, 'Password must contain at least one number')
+  .regex(/[^A-Za-z0-9]/, 'Password must contain at least one special character');
+
+const resetPasswordSchema = z
+  .object({
+    newPassword: passwordSchema,
+    confirmPassword: z.string().min(1, 'Please confirm your password'),
+  })
+  .refine((data) => data.newPassword === data.confirmPassword, {
+    message: "Passwords don't match",
+    path: ['confirmPassword'],
+  });
+
+function ResetPasswordFormContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const token = searchParams.get('token');
+
   const [formData, setFormData] = useState({
-    currentPassword: '',
     newPassword: '',
     confirmPassword: '',
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
+
+  useEffect(() => {
+    if (!token) {
+      setErrors({
+        submit: 'No reset token provided. Please check your email for the reset link.',
+      });
+    }
+  }, [token]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -37,7 +67,7 @@ export default function ChangePasswordForm() {
 
     // Client-side validation
     try {
-      changePasswordSchema.parse(formData);
+      resetPasswordSchema.parse(formData);
       setErrors({});
     } catch (error) {
       if (error instanceof ZodError) {
@@ -51,29 +81,25 @@ export default function ChangePasswordForm() {
       return;
     }
 
-    // Get token from localStorage
-    const token = localStorage.getItem('authToken');
     if (!token) {
       setErrors({
-        submit: 'You must be logged in to change your password.',
+        submit: 'No reset token provided. Please check your email for the reset link.',
       });
-      setTimeout(() => router.push('/login'), 2000);
       return;
     }
 
-    // API call to change password
+    // API call to reset password
     setIsLoading(true);
     setErrors({});
 
     try {
-      const response = await fetch('/api/auth/change-password', {
+      const response = await fetch('/api/auth/reset-password', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          currentPassword: formData.currentPassword,
+          token,
           newPassword: formData.newPassword,
           confirmPassword: formData.confirmPassword,
         }),
@@ -86,7 +112,7 @@ export default function ChangePasswordForm() {
           setErrors(data.errors);
         } else {
           setErrors({
-            submit: data.message || 'Failed to change password. Please try again.',
+            submit: data.message || 'Failed to reset password. Please try again.',
           });
         }
         setIsLoading(false);
@@ -95,11 +121,6 @@ export default function ChangePasswordForm() {
 
       // Success
       setIsSuccess(true);
-      setFormData({
-        currentPassword: '',
-        newPassword: '',
-        confirmPassword: '',
-      });
       setIsLoading(false);
 
       // Redirect to login after 2 seconds
@@ -116,27 +137,35 @@ export default function ChangePasswordForm() {
 
   return (
     <form onSubmit={handleSubmit} className="w-full space-y-6">
-      {!isSuccess ? (
+      {isSuccess ? (
+        <>
+          <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+            <h3 className="font-semibold text-green-900 mb-2">Password Reset Successful!</h3>
+            <p className="text-sm text-green-800">
+              Your password has been successfully reset. You can now log in with your new password.
+            </p>
+          </div>
+
+          <Button
+            type="button"
+            variant="primary"
+            fullWidth
+            onClick={() => router.push('/login')}
+          >
+            Go to Login
+          </Button>
+        </>
+      ) : (
         <>
           <p className="text-sm text-zinc-600 mb-6">
             Create a new strong password for your account.
           </p>
 
           {errors.submit && (
-            <div className="bg-red-50 border border-red-200 rounded-lg p-3">
-              <p className="text-sm text-red-700 font-medium">{errors.submit}</p>
+            <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+              <p className="text-red-800 text-sm font-medium">{errors.submit}</p>
             </div>
           )}
-
-          <PasswordInput
-            name="currentPassword"
-            label="Current Password"
-            placeholder="Enter your current password"
-            value={formData.currentPassword}
-            onChange={handleInputChange}
-            error={errors.currentPassword}
-            required
-          />
 
           <PasswordInput
             name="newPassword"
@@ -169,28 +198,33 @@ export default function ChangePasswordForm() {
           </div>
 
           <Button type="submit" variant="primary" fullWidth disabled={isLoading}>
-            {isLoading ? 'Updating Password...' : 'Update Password'}
+            {isLoading ? 'Resetting Password...' : 'Reset Password'}
           </Button>
-        </>
-      ) : (
-        <>
-          <div className="bg-teal-50 border border-teal-200 rounded-lg p-4">
-            <h3 className="font-semibold text-teal-900 mb-2">Password Updated!</h3>
-            <p className="text-sm text-teal-800">
-              Your password has been successfully changed. Redirecting to login...
-            </p>
-          </div>
 
-          <Button
-            type="button"
-            variant="primary"
-            fullWidth
-            onClick={() => router.push('/login')}
-          >
-            Go to Login
-          </Button>
+          <div className="text-center">
+            <a
+              href="/login"
+              className="text-sm text-teal-600 hover:text-teal-700 font-medium"
+            >
+              Back to Login
+            </a>
+          </div>
         </>
       )}
     </form>
+  );
+}
+
+export default function ResetPasswordForm() {
+  return (
+    <Suspense
+      fallback={
+        <div className="w-full space-y-6">
+          <p className="text-sm text-zinc-600 mb-6">Loading...</p>
+        </div>
+      }
+    >
+      <ResetPasswordFormContent />
+    </Suspense>
   );
 }

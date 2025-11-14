@@ -9,6 +9,7 @@ interface InputProps {
   label?: string;
   required?: boolean;
   className?: string;
+  error?: string;
 }
 
 export const Input: React.FC<InputProps> = ({
@@ -20,6 +21,7 @@ export const Input: React.FC<InputProps> = ({
   label,
   required = false,
   className = '',
+  error,
 }) => {
   return (
     <div className="mb-4">
@@ -36,10 +38,14 @@ export const Input: React.FC<InputProps> = ({
         value={value}
         onChange={onChange}
         required={required}
-        className={`w-full px-4 py-3 rounded-lg border bg-slate-50 text-sm 
-          focus:ring-2 focus:ring-teal-600 focus:outline-none transition-all
+        className={`w-full px-4 py-3 rounded-lg border bg-slate-50 text-slate-800 text-sm 
+          focus:ring-2 focus:outline-none transition-all
+          ${error ? 'border-red-500 focus:ring-red-600' : 'border-slate-200 focus:ring-teal-600'}
           ${className}`}
       />
+      {error && (
+        <p className="mt-1 text-sm text-red-500">{error}</p>
+      )}
     </div>
   );
 };
